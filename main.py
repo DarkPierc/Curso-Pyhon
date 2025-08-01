@@ -9,24 +9,36 @@ from datetime import datetime
 import random
 
 def generar_luhn(bin_prefix):
-    # Completar el número con dígitos aleatorios
-    numero = list(bin_prefix.replace('x', str(random.randint(0, 9))))
-    # Calcular dígito de verificación Luhn
+    # Reemplazar cada 'x' con un dígito aleatorio
+    numero_sin_verificar = ''
+    for digito in bin_prefix:
+        if digito.lower() == 'x':
+            numero_sin_verificar += str(random.randint(0, 9))
+        else:
+            numero_sin_verificar += digito
+    
+    # Verificar que todos sean dígitos
+    if not numero_sin_verificar.isdigit():
+        raise ValueError("El BIN debe contener solo dígitos o 'x'")
+    
+    # Aseguramos que tengamos 15 dígitos (para luego agregar el dígito de verificación)
+    if len(numero_sin_verificar) > 15:
+        numero_sin_verificar = numero_sin_verificar[:15]
+    
+    # Calculamos el dígito de verificación usando el algoritmo de Luhn
     suma = 0
-    pos = len(numero) - 1
-    while pos >= 0:
-        digito = int(numero[pos])
-        if pos % 2 == 0:  # posiciones pares
-            temp = digito * 2
-            if temp > 9:
-                temp -= 9
-            suma += temp
-        else:  # posiciones impares
-            suma += digito
-        pos -= 1
+    for i, digito in enumerate(reversed(numero_sin_verificar)):
+        n = int(digito)
+        if i % 2 == 1:  # Posiciones impares (desde el final)
+            n *= 2
+            if n > 9:
+                n -= 9
+        suma += n
+    
     digito_verificacion = (10 - (suma % 10)) % 10
-    numero.append(str(digito_verificacion))
-    return ''.join(numero)
+    
+    # Devolvemos el número completo con el dígito de verificación
+    return numero_sin_verificar + str(digito_verificacion)
 
 class BinGeneratorApp:
     def __init__(self, root):
@@ -120,32 +132,74 @@ class BinGeneratorApp:
         self.year_var.set(año)
 
     def generar_bin(self):
-        bin_base = self.bin_entry.get()
+        bin_base = self.bin_entry.get().strip()
         if not bin_base:
             messagebox.showerror("Error", "Ingrese un BIN")
             return
 
-        # Completar con x si es menor a 16 dígitos
-        if len(bin_base) < 16:
+        # Completar con x si es menor a 15 dígitos (para luego agregar el dígito de verificación)
+        if len(bin_base) < 15:
             bin_base = bin_base + 'x' * (15 - len(bin_base))
+        elif len(bin_base) > 15:
+            bin_base = bin_base[:15]  # Truncar si es más largo
 
         mes = self.month_var.get()
         año = self.year_var.get()
-        cantidad = int(self.amount_var.get())
+        cantidad_solicitada = int(self.amount_var.get())
 
         self.result_text.delete(1.0, tk.END)
         resultados = []
 
-        for _ in range(cantidad):
-            tarjeta = generar_luhn(bin_base)
-            cvv = str(random.randint(100, 999))
-            resultado = f"{tarjeta}|{mes}|{año}|{cvv}"
-            resultados.append(resultado)
-            self.result_text.insert(tk.END, resultado + '\n')
+        try:
+            # Generamos tarjetas hasta obtener la cantidad solicitada de tarjetas válidas
+            tarjetas_generadas = 0
+            intentos_maximos = cantidad_solicitada * 10  # Límite para evitar bucles infinitos
+            intentos = 0
+            
+            while tarjetas_generadas < cantidad_solicitada and intentos < intentos_maximos:
+                intentos += 1
+                try:
+                    # Generar tarjeta con algoritmo Luhn
+                    tarjeta = generar_luhn(bin_base)
+                    
+                    # Verificar que la tarjeta sea válida según Luhn
+                    if self.verificar_luhn(tarjeta):
+                        cvv = str(random.randint(100, 999))
+                        resultado = f"{tarjeta}|{mes}|{año}|{cvv}"
+                        resultados.append(resultado)
+                        self.result_text.insert(tk.END, resultado + '\n')
+                        tarjetas_generadas += 1
+                except Exception as e:
+                    # No mostramos errores, solo continuamos intentando
+                    pass
 
-        # Copiar al portapapeles
-        pyperclip.copy('\n'.join(resultados))
-        messagebox.showinfo("Éxito", f"{cantidad} tarjetas generadas y copiadas al portapapeles")
+            # Copiar al portapapeles si hay resultados
+            if resultados:
+                pyperclip.copy('\n'.join(resultados))
+                messagebox.showinfo("Éxito", f"{len(resultados)} tarjetas válidas generadas y copiadas al portapapeles")
+            else:
+                messagebox.showwarning("Advertencia", "No se pudo generar ninguna tarjeta válida")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en la generación: {str(e)}")
+            self.result_text.insert(tk.END, f"Error: {str(e)}\n")
+            
+    def verificar_luhn(self, numero):
+        """Verifica si un número de tarjeta cumple con el algoritmo de Luhn"""
+        if not numero.isdigit():
+            return False
+            
+        # Calculamos la suma según el algoritmo de Luhn
+        suma = 0
+        for i, digito in enumerate(reversed(numero)):
+            n = int(digito)
+            if i % 2 == 1:  # Posiciones impares (desde el final)
+                n *= 2
+                if n > 9:
+                    n -= 9
+            suma += n
+                
+        # La suma debe ser divisible por 10
+        return suma % 10 == 0
 
     def guardar_bin(self):
         bin_actual = self.result_text.get(1.0, tk.END).strip()
