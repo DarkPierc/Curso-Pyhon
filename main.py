@@ -160,23 +160,41 @@ class BinGeneratorApp:
         webbrowser.open('https://temp-mail.org/es/')
 
     def bin_checker(self):
-        bin_num = self.bin_entry.get()[:6]  # Tomamos los primeros 6 dígitos
-        if bin_num and len(bin_num) >= 6:
+        bin_number = self.bin_entry.get()[:8]  # Get first 8 digits of BIN
+        if len(bin_number) >= 6:
             try:
-                response = requests.get(f"https://lookup.binlist.net/{bin_num}")
+                # Make API request to binlist.net
+                headers = {'Accept-Version': '3'}
+                response = requests.get(f'https://lookup.binlist.net/{bin_number}', headers=headers)
+                
                 if response.status_code == 200:
                     data = response.json()
-                    info = f"Esquema: {data.get('scheme', 'N/A')}\n"
-                    info += f"Tipo: {data.get('type', 'N/A')}\n"
-                    info += f"Marca: {data.get('brand', 'N/A')}\n"
-                    info += f"País: {data.get('country', {}).get('name', 'N/A')}\n"
-                    info += f"Banco: {data.get('bank', {}).get('name', 'N/A')}"
+                    
+                    # Format the response data
+                    result = f"BIN Information:\n"
+                    result += f"Scheme: {data.get('scheme', 'N/A')}\n"
+                    result += f"Type: {data.get('type', 'N/A')}\n"
+                    result += f"Brand: {data.get('brand', 'N/A')}\n"
+                    
+                    if 'country' in data:
+                        result += f"Country: {data['country'].get('name', 'N/A')} {data['country'].get('emoji', '')}\n"
+                        result += f"Currency: {data['country'].get('currency', 'N/A')}\n"
+                    
+                    if 'bank' in data:
+                        result += f"Bank: {data['bank'].get('name', 'N/A')}\n"
+                        result += f"Bank URL: {data['bank'].get('url', 'N/A')}\n"
+                        result += f"Bank Phone: {data['bank'].get('phone', 'N/A')}\n"
+                    
+                    # Display results
                     self.result_text.delete(1.0, tk.END)
-                    self.result_text.insert(tk.END, info)
+                    self.result_text.insert(tk.END, result)
                 else:
-                    messagebox.showerror("Error", "BIN no válido")
-            except Exception as e:
-                messagebox.showerror("Error", f"Error al verificar BIN: {str(e)}")
+                    messagebox.showerror("Error", f"API request failed with status code: {response.status_code}")
+                    
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Error", f"Failed to connect to BIN lookup service: {str(e)}")
+            except json.JSONDecodeError:
+                messagebox.showerror("Error", "Failed to parse API response")
         else:
             messagebox.showwarning("Advertencia", "Por favor ingrese un BIN válido (mínimo 6 dígitos)")
 
